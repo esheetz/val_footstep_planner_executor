@@ -1,0 +1,5 @@
+controller_msgs/FootstepDataListMessage planned_footsteps
+
+---
+
+bool success

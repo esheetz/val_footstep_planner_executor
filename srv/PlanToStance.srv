@@ -1,0 +1,6 @@
+bool request
+
+---
+
+bool success
+controller_msgs/FootstepDataListMessage planned_footsteps

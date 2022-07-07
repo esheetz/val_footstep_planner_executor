@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--***********************************************************
+	Footstep Planner Executor Server Node
+	Emily Sheetz, NSTGRO VTE 2022
+
+	run either:
+		$ roslaunch val_footstep_planner_executor footstep_planner_executor_server_node.launch
+		OR
+		$ rosrun val_footstep_planner_executor footstep_planner_executor_server_node.py
+************************************************************-->
+<launch>
+	<arg name="debug" default="false"/>
+	<arg unless="$(arg debug)" name="launch_prefix" value="" />
+	<arg if="$(arg debug)" name="launch_prefix" value="xterm -e gdb **args" />
+
+	<node launch-prefix="$(arg launch_prefix)" pkg="val_footstep_planner_executor" type="footstep_planner_executor_server_node.py" name="ValkyrieFootstepPlannerExecutorServerNode" output="screen">
+		<!--<param name="" type="" value=""/> -->
+	</node>
+</launch>

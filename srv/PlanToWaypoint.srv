@@ -1,0 +1,6 @@
+geometry_msgs/Pose waypoint_pose
+
+---
+
+bool success
+controller_msgs/FootstepDataListMessage planned_footsteps
