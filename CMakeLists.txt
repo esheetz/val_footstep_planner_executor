@@ -33,12 +33,28 @@ catkin_package(
 )
 include_directories(${catkin_INCLUDE_DIRS})
 
-#---------------------------------------------------------------------------
-# Add subdirectories
-#---------------------------------------------------------------------------
+#------------------------------------------------------------------------
+#     Find ROS Services
+#     Note:
+#         ${CATKIN_DEVEL_PREFIX} is devel/.private/${PROJECT_NAME}
+#         services are in devel/include
+#         also works: ${CATKIN_DEVEL_PREFIX}/${CATKIN_GLOBAL_INCLUDE_DESTINATION}
+#------------------------------------------------------------------------
+set(SERVICE_DIR ${CATKIN_DEVEL_PREFIX}/../../${CATKIN_GLOBAL_INCLUDE_DESTINATION})
+message("")
+message("Service directory: ${SERVICE_DIR}")
+message("")
+include_directories ("${SERVICE_DIR}")
+
+#------------------------------------------------------------------------
+#     Include Directories
+#------------------------------------------------------------------------
 include_directories ("${PROJECT_SOURCE_DIR}/..")
 include_directories ("${PROJECT_SOURCE_DIR}")
 include_directories ("${PROJECT_SOURCE_DIR}/nodes")
 include_directories ("${PROJECT_SOURCE_DIR}/srv")
-include_directories (${catkin_INCLUDE_DIRS})
+
+#---------------------------------------------------------------------------
+#     Directory Selection
+#---------------------------------------------------------------------------
 add_subdirectory (nodes)

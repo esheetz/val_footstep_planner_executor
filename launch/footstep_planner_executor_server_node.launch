@@ -12,8 +12,14 @@
 	<arg name="debug" default="false"/>
 	<arg unless="$(arg debug)" name="launch_prefix" value="" />
 	<arg if="$(arg debug)" name="launch_prefix" value="xterm -e gdb **args" />
+	
+	<!-- parameters for specifying destination types -->
+	<arg name="waypoints" default="true"/>
+	<arg name="stances" default="true"/>
 
 	<node launch-prefix="$(arg launch_prefix)" pkg="val_footstep_planner_executor" type="footstep_planner_executor_server_node.py" name="ValkyrieFootstepPlannerExecutorServerNode" output="screen">
+		<param name="waypoints" type="bool" value="$(arg waypoints)"/>
+		<param name="stances" type="bool" value="$(arg stances)"/>
 		<!--<param name="" type="" value=""/> -->
 	</node>
 </launch>

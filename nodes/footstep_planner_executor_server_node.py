@@ -26,7 +26,11 @@ from val_footstep_planner_executor.srv import ExecuteToStance, ExecuteToStanceRe
 
 class FootstepPlannerExecutorServerNode:
 
-    def __init__(self):
+    def __init__(self, waypoints=True, stances=True):
+        # set internal flags
+        self.provide_waypoint_services = waypoints
+        self.provide_stance_services = stances
+
         # set action server and service names
         self.footstep_planner_action_server_name = 'ValNavFootstepPlannerInterfaceServer'
         self.footstep_executor_topic_name = '/ihmc/valkyrie/humanoid_control/input/footstep_data_list'
@@ -56,18 +60,23 @@ class FootstepPlannerExecutorServerNode:
         # # server for transforms
         # self.transform_client = rospy.ServiceProxy(self.transform_provider_service_name, TransformProvider)
 
-        # wait until FK service has started up and started listening for requests
-        rospy.loginfo("[Footstep Planner Executor Server Node] Waiting for ROS service %s..." % self.moveit_forward_kinematics_service_name)
-        rospy.wait_for_service(self.moveit_forward_kinematics_service_name)
-        rospy.loginfo("[Footstep Planner Executor Server Node] ROS service %s is ready" % self.moveit_forward_kinematics_service_name)
+        # only wait for FK service if we want to plan/execute for stances; otherwise, not needed
+        if self.provide_stance_services:
+            # wait until FK service has started up and started listening for requests
+            rospy.loginfo("[Footstep Planner Executor Server Node] Waiting for ROS service %s..." % self.moveit_forward_kinematics_service_name)
+            rospy.wait_for_service(self.moveit_forward_kinematics_service_name)
+            rospy.loginfo("[Footstep Planner Executor Server Node] ROS service %s is ready" % self.moveit_forward_kinematics_service_name)
 
-        # server for FK
-        self.forward_kinematics_client = rospy.ServiceProxy(self.moveit_forward_kinematics_service_name, GetPositionFK)
+            # server for FK
+            self.forward_kinematics_client = rospy.ServiceProxy(self.moveit_forward_kinematics_service_name, GetPositionFK)
 
         # initialize stance gen flags
         self.stance_gen_robot_state = None
         self.stance_gen_result = False
         self.stance_gen_adjust = False
+
+        # initialize optional internal storage for footstep plan
+        self.stored_footstep_plan = None
 
         # create stance gen response subscribers
         rospy.Subscriber(self.stance_gen_robot_state_subscriber_name, RobotState, self.stance_gen_robot_state_callback)
@@ -140,12 +149,18 @@ class FootstepPlannerExecutorServerNode:
         if len(result.footstep_toolbox_output.footstep_data_list.footstep_data_list) > 0:
             rospy.loginfo("[Footstep Planner Executor Server Node] Footsteps planned successfully! Found %d footsteps to goal." % len(result.footstep_toolbox_output.footstep_data_list.footstep_data_list))
             footstep_plan = result.footstep_toolbox_output.footstep_data_list
+            self.stored_footstep_plan = footstep_plan
             return (True, footstep_plan)
         else:
             rospy.logwarn("[Footstep Planner Executor Server Node] Footsteps not planned successfully.")
             return (False, FootstepDataListMessage()) # return empty footstep data list message
 
     def execute_plan(self, footstep_plan):
+        # verify that plan is not none
+        if footstep_plan is None:
+            rospy.logwarn("[Footstep Planner Executor Server Node] Plan is none; cannot execute. Make sure to plan before executing.")
+            return False
+
         # verify that we have a plan
         if len(footstep_plan.footstep_data_list) > 0:
             # publish message
@@ -203,9 +218,22 @@ class FootstepPlannerExecutorServerNode:
         # get plan from goal pose
         return self.get_plan(goal)
 
-    def execute_plan_to_waypoint(self, footstep_plan):
+    def execute_plan_to_waypoint(self, use_stored_footstep_plan, footstep_plan):
+        # initialize result
+        res = False
+
         # execute planned footsteps
-        return self.execute_plan(footstep_plan)
+        if use_stored_footstep_plan:
+            # use stored footstep plan
+            res = self.execute_plan(self.stored_footstep_plan)
+        else:
+            # use provided footstep plan
+            res = self.execute_plan(footstep_plan)
+
+        # clear stored footstep plan
+        self.stored_footstep_plan = None
+
+        return res
 
     ########################################
     ### PLANNING AND EXECUTING TO STANCE ###
@@ -295,9 +323,22 @@ class FootstepPlannerExecutorServerNode:
         # get plan from goal pose
         return self.get_plan(goal)
 
-    def execute_plan_to_stance(self, footstep_plan):
+    def execute_plan_to_stance(self, use_stored_footstep_plan, footstep_plan):
+        # initialize result
+        res = False
+
         # execute planned footsteps
-        return self.execute_plan(footstep_plan)
+        if use_stored_footstep_plan:
+            # use stored footstep plan
+            res = self.execute_plan(self.stored_footstep_plan)
+        else:
+            # use provided footstep plan
+            res = self.execute_plan(footstep_plan)
+
+        # clear stored footstep plan
+        self.stored_footstep_plan = None
+
+        return res
 
     #########################
     ### SERVICE CALLBACKS ###
@@ -322,7 +363,7 @@ class FootstepPlannerExecutorServerNode:
         res = ExecuteToWaypointResponse()
 
         # execute planned footsteps
-        succ = self.execute_plan_to_waypoint(req.planned_footsteps)
+        succ = self.execute_plan_to_waypoint(req.use_stored_footstep_plan, req.planned_footsteps)
 
         # set response fields
         res.success = succ
@@ -353,7 +394,7 @@ class FootstepPlannerExecutorServerNode:
         res = ExecuteToStanceResponse()
 
         # execute planned footsteps
-        succ = self.execute_plan_to_stance(req.planned_footsteps)
+        succ = self.execute_plan_to_stance(req.use_stored_footstep_plan, req.planned_footsteps)
 
         # set response fields
         res.success = succ
@@ -361,28 +402,62 @@ class FootstepPlannerExecutorServerNode:
         # return result
         return res
 
+    ##########################
+    ### ADVERTISE SERVICES ###
+    ##########################
+
+    def advertise_waypoint_services(self):
+        self.plan_to_waypoint_service = rospy.Service("plan_to_waypoint", PlanToWaypoint,
+                                                      self.plan_to_waypoint_request_callback)
+        self.execute_to_waypoint_service = rospy.Service("execute_to_waypoint", ExecuteToWaypoint,
+                                                         self.execute_to_waypoint_request_callback)
+
+        rospy.loginfo("[Footstep Planner Executor Server Node] Providing services for planning and executing to waypoints!")
+
+        return
+
+    def advertise_stance_services(self):
+        self.plan_to_stance_service = rospy.Service("plan_to_stance", PlanToStance,
+                                                    self.plan_to_stance_request_callback)
+        self.execute_to_stance_service = rospy.Service("execute_to_stance", ExecuteToStance,
+                                                       self.execute_to_stance_request_callback)
+
+        rospy.loginfo("[Footstep Planner Executor Server Node] Providing services for planning and executing to stances!")
+
+        return
+
+    def advertise_services(self):
+        if self.provide_waypoint_services:
+            self.advertise_waypoint_services()
+
+        if self.provide_stance_services:
+            self.advertise_stance_services()
+
+        rospy.loginfo("[Footstep Planner Executor Server Node] Providing services for planning and executing footsteps!")
+
+        return
+
 #####################
 ### MAIN FUNCTION ###
 #####################
 
 if __name__ == '__main__':
+    # set node name
+    node_name= "ValkyrieFootstepPlannerExecutorServerNode"
+    param_prefix = "/" + node_name + "/"
+
+    # get ROS parameters
+    waypoints = rospy.get_param(param_prefix + 'waypoints', True)
+    stances = rospy.get_param(param_prefix + 'stances', True)
+
     # initialize server node
     rospy.init_node("ValkyrieFootstepPlannerExecutorServerNode")
 
     # create server node
-    server_node = FootstepPlannerExecutorServerNode()
+    server_node = FootstepPlannerExecutorServerNode(waypoints=waypoints, stances=stances)
 
     # advertise services
-    plan_to_waypoint_service = rospy.Service("plan_to_waypoint", PlanToWaypoint,
-                                             server_node.plan_to_waypoint_request_callback)
-    execute_to_waypoint_service = rospy.Service("execute_to_waypoint", ExecuteToWaypoint,
-                                                server_node.execute_to_waypoint_request_callback)
-    plan_to_stance_service = rospy.Service("plan_to_stance", PlanToStance,
-                                           server_node.plan_to_stance_request_callback)
-    execute_to_stance_service = rospy.Service("execute_to_stance", ExecuteToStance,
-                                              server_node.execute_to_stance_request_callback)
-
-    rospy.loginfo("[Footstep Planner Executor Server Node] Providing services for planning and executing footsteps!")
+    server_node.advertise_services()
 
     # run node, wait for requests
     while not rospy.is_shutdown():

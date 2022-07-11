@@ -3,4 +3,4 @@
 # for planning and executing footsteps
 #-----------------------------------------------------------------------
 install(PROGRAMS footstep_planner_executor_server_node.py
-        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/scripts)
+        DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
