@@ -19,6 +19,7 @@ from controller_msgs.msg import FootstepDataListMessage
 from moveit_msgs.srv import GetPositionFK
 from moveit_msgs.msg import RobotState
 from std_msgs.msg import Bool, Header
+from val_safety_exception_reporter.msg import CannotGetFootstepPlan, CannotExecuteFootsteps
 from val_footstep_planner_executor.srv import PlanToWaypoint, PlanToWaypointRequest, PlanToWaypointResponse
 from val_footstep_planner_executor.srv import ExecuteToWaypoint, ExecuteToWaypointRequest, ExecuteToWaypointResponse
 from val_footstep_planner_executor.srv import PlanToStance, PlanToStanceRequest, PlanToStanceResponse
@@ -84,6 +85,10 @@ class FootstepPlannerExecutorServerNode:
         rospy.Subscriber(self.stance_gen_show_stance_response_subscriber_name, Bool, self.stance_gen_show_response_callback)
         rospy.Subscriber(self.stance_gen_adjust_stance_response_subscriber_name, Bool, self.stance_gen_adjust_response_callback)
 
+        # create safety reporter publishers
+        self.safety_reporter_plan_pub = rospy.Publisher("/valkyrie_safety_reporter/cannot_get_footstep_plan", CannotGetFootstepPlan, queue_size=10)
+        self.safety_reporter_execute_pub = rospy.Publisher("/valkyrie_safety_reporter/cannot_execute_footsteps", CannotExecuteFootsteps, queue_size=10)
+
         rospy.loginfo("[Footstep Planner Executor Server Node] Ready to go!")
 
     ###################################
@@ -115,6 +120,35 @@ class FootstepPlannerExecutorServerNode:
     def reset_stance_gen_flags(self):
         self.stance_gen_result = False
         self.stance_gen_adjust = False
+        return
+
+    ########################
+    ### SAFETY REPORTING ###
+    ########################
+
+    def publish_safety_report_footstep_plan(waypoint_pose):
+        # create message
+        plan_msg = CannotGetFootstepPlan()
+
+        # set message fields
+        plan_msg.planning_exception = "footsteps not planned successfully"
+        plan_msg.waypoint_pose = requested_waypoint
+
+        # publish message
+        self.safety_reporter_plan_pub.publish(plan_msg)
+
+        return
+
+    def publish_safety_report_footstep_execute(execution_exception):
+        # create message
+        execute_msg = CannotExecuteFootsteps()
+
+        # set message fields
+        execute_msg.execution_exception = execution_exception
+
+        # publish message
+        self.safety_reporter_execute_pub.publish(execute_msg)
+
         return
 
     ##########################
@@ -153,12 +187,16 @@ class FootstepPlannerExecutorServerNode:
             return (True, footstep_plan)
         else:
             rospy.logwarn("[Footstep Planner Executor Server Node] Footsteps not planned successfully.")
+            # publish message for safety reporter
+            self.publish_safety_report_footstep_plan(goal.set_waypoint_goal)
             return (False, FootstepDataListMessage()) # return empty footstep data list message
 
     def execute_plan(self, footstep_plan):
         # verify that plan is not none
         if footstep_plan is None:
             rospy.logwarn("[Footstep Planner Executor Server Node] Plan is none; cannot execute. Make sure to plan before executing.")
+            # publish message for safety reporter
+            self.publish_safety_report_footstep_execute("cannot execute when plan is none; make sure to plan before executing")
             return False
 
         # verify that we have a plan
@@ -169,6 +207,8 @@ class FootstepPlannerExecutorServerNode:
             return True
         else:
             rospy.logwarn("[Footstep Planner Executor Server Node] Plan does not exist; cannot execute.")
+            # publish message for safety reporter
+            self.publish_safety_report_footstep_execute("cannot execute plan with empty footstep data list")
             return False
 
     ##########################################

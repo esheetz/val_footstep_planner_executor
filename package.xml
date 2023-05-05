@@ -20,4 +20,5 @@
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>controller_msgs</depend>
+  <depend>val_safety_exception_reporter</depend>
 </package>

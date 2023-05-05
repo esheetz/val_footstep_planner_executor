@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   std_msgs
   controller_msgs
+  val_safety_exception_reporter
   message_generation
 )
 
@@ -29,7 +30,7 @@ add_subdirectory (srv)
 #     catkin Setup
 #------------------------------------------------------------------------
 catkin_package(
-  CATKIN_DEPENDS roscpp rospy tf geometry_msgs sensor_msgs std_msgs controller_msgs
+  CATKIN_DEPENDS roscpp rospy tf geometry_msgs sensor_msgs std_msgs controller_msgs val_safety_exception_reporter
 )
 include_directories(${catkin_INCLUDE_DIRS})
 
